@@ -1,0 +1,48 @@
+{
+  "info": {
+    "_postman_id": "14c77375-ba72-4698-a669-fa50cb26ffdb",
+    "name": "Aladia",
+    "description": "# Aladia NestJS Technical Challenge\n\nlink github repo: [https://github.com/GGGGame/Aladia](https://github.com/GGGGame/Aladia)\n\n## Overview\n\nThis repository is my submission for the Aladia NestJS Backend Technical Challenge. Below I document how each requirement was addressed, along with the bonus features implemented and key architectural decisions.\n\n## Project Structure\n\nAs required, the project uses a NestJS Monorepo with the following `apps/` layout:\n\n``` text\napps/\n├── gateway/          # Public HTTP REST API\n├── authentication/   # Internal TCP microservice\n├── common/           # Shared DTOs, RTOs, NetworkingService\n├── core/             # Logger, GlobalExceptionFilter, TransformInterceptor\n└── config/           # Typed environment configuration\n\n ```\n\n### Monorepo Architecture\n\nThe project uses the native NestJS `apps/` monorepo structure. Each app is independently runnable and shares code only through the `common`, `core`, and `config` libraries.\n\n### Controller → Service → Repository\n\nAs explicitly requested (no Clean or Hexagonal Architecture), all feature code follows a strict 3-tier pattern:\n\n- **Controllers** live in `apps/gateway` and handle HTTP routing and DTO validation.\n    \n- **Services** in `apps/authentication` contain business logic.\n    \n- **Repositories** in `apps/authentication` handle all Mongoose/MongoDB interactions.\n    \n\n### HTTP Logic in Gateway, Business Logic in Authentication\n\nAll REST endpoints are defined in `apps/gateway`. The gateway does not interact with the database directly — it forwards every operation to the authentication microservice via TCP.\n\n### TCP Communication via NetworkingService\n\nThe two apps communicate exclusively over TCP using `@nestjs/microservices`. A dedicated `NetworkingService` (in `apps/common`) abstracts the message-passing logic, so gateway controllers never reference the TCP client directly. This was a specific requirement of the challenge.\n\n### User Management Endpoints\n\nBoth required endpoints are implemented:\n\n| Method | Endpoint | Description |\n| --- | --- | --- |\n| `POST` | `/auth/register` | Registers a new user (validated DTO → TCP → authentication service → MongoDB) |\n| `GET` | `/auth/users` | Returns all registered users |\n\n### Validation with DTOs\n\n`class-validator` and `class-transformer` are used on all incoming request bodies. DTOs are defined in `apps/common` so both apps share the same contracts.\n\n### Database: MongoDB with Mongoose\n\nUser persistence is handled in `apps/authentication` using `@nestjs/mongoose`. MongoDB is provisioned via Docker Compose with authentication enabled.\n\n### Centralized Logging Module\n\nA custom `LoggerService` lives in `apps/core` and is used across all apps for context-aware, structured logging.\n\n### Health Checks\n\nA `GET /health` endpoint is exposed on the gateway. It pings the authentication service and verifies DB connectivity, providing a basic readiness probe.\n\n### In-Memory Caching\n\n`@nestjs/cache-manager` is applied to `GET /auth/users` with a 60-second TTL, as a practical example of reducing load on high-read endpoints.\n\n### Swagger Documentation\n\nAuto-generated API docs are available at [http://localhost:3000/swagger](http://localhost:3000/swagger), with annotated response models and endpoint descriptions.\n\n### Response Standardization\n\nA `TransformInterceptor` in `apps/core` wraps all responses:\n\n``` json\n{\n  \"success\": true | false,\n  \"message\": \"...\",\n  \"data\": {} | null,\n  \"timestamp\": \"...\"\n}\n\n ```\n\n### Global Exception Filter\n\nA `GlobalExceptionFilter` in `apps/core` standardizes error responses and correctly propagates exceptions thrown inside the authentication microservice back through TCP to the gateway and out to the client.\n\n---\n\n## Docker Setup\n\nA `docker-compose.yml` orchestrates all three containers:\n\n1. **aladia-mongodb** — persistent store with auth enabled\n    \n2. **authentication** — internal service with a TCP health check\n    \n3. **gateway** — waits for authentication to be healthy before starting\n    \n\n### Quick start:\n\n``` bash\ncp .env.example .env\ndocker-compose up --build\n\n ```",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "13486634"
+  },
+  "item": [
+    {
+      "name": "get_users",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "localhost:3000/auth/users",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["auth", "users"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "register_user",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"user1@aladia.io\",\n  \"password\": \"Password123!\",\n  \"username\": \"Davide1\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "localhost:3000/auth/register",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["auth", "register"]
+        }
+      },
+      "response": []
+    }
+  ]
+}

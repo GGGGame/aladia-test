@@ -1,0 +1,74 @@
+services:
+  mongodb:
+    image: mongo:latest
+    container_name: aladia-mongodb
+    ports:
+      - '27017:27017'
+    command: ['mongod', '--bind_ip_all', '--auth']
+    volumes:
+      - aladia-mongodb-data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=aladia
+      - MONGO_INITDB_ROOT_PASSWORD=aladia
+      - MONGO_INITDB_DATABASE=aladia
+    networks:
+      - aladia-network
+    logging:
+      driver: 'none'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'mongosh',
+          '--quiet',
+          '--username',
+          'aladia',
+          '--password',
+          'aladia',
+          '--eval',
+          "db.adminCommand('ping').ok",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  authentication:
+    build: { context: ., args: { APP_NAME: authentication } }
+    env_file: .env
+    environment:
+      - LISTEN_HOST=0.0.0.0
+    depends_on: { mongodb: { condition: service_healthy } }
+    networks:
+      - aladia-network
+    healthcheck:
+      test: ['CMD-SHELL', 'nc -z localhost 3001 || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  gateway:
+    build: { context: ., args: { APP_NAME: gateway } }
+    ports:
+      - '3000:3000'
+    env_file: .env
+    environment:
+      - LISTEN_HOST=0.0.0.0
+      - AUTH_HOST=authentication
+    depends_on: { authentication: { condition: service_healthy } }
+    networks:
+      - aladia-network
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:3000/health']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+networks:
+  aladia-network:
+    driver: bridge
+
+volumes:
+  aladia-mongodb-data:
